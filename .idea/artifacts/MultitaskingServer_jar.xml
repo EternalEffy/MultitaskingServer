@@ -1,0 +1,9 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="MultitaskingServer:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/MultitaskingServer_jar</output-path>
+    <root id="archive" name="MultitaskingServer.jar">
+      <element id="module-output" name="MultitaskingServer" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/json-20200518.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>
