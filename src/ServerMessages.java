@@ -13,5 +13,6 @@ public class ServerMessages {
             MESSAGE_LOAD_FILE = "Attempt to upload a file",
             MESSAGE_CLIENT_CLOSE = "Client disconnected.",
             MESSAGE_REQUEST = "The client send a request: ",
+            MESSAGE_REQUEST_NO = "File not exist",
             MESSAGE_END = "Server is finished.";
 }

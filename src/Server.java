@@ -17,6 +17,7 @@ public class Server {
     private boolean flag = true;
     private int countRequests = 0;
     private byte[] buffer;
+    private JSONObject jsonObject;
     private Exception FileNotFound;
 
     public int loadFile(String fileName){
@@ -71,42 +72,25 @@ public class Server {
                             System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
                         }
                         else System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_NO);
-
                         countRequests=0;
                     }
                     requestFormClient = inStream.readUTF();
                     countRequests++;
                     index = Integer.parseInt(inStream.readUTF());
-                    JSONObject jsonObject = new JSONObject(requestFormClient);
-
+                    jsonObject = new JSONObject(requestFormClient);
+                    System.out.println(ServerMessages.MESSAGE_REQUEST+jsonObject);
                     switch (jsonObject.getString("request")) {
                         case Requests.add:
-                            System.out.println(ServerMessages.MESSAGE_ADD);
-                            crud.add(jsonObject.getJSONArray(myData.getListName()), myData.getListName());
-                            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
-                            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
-                            outStream.flush();
+                            add(jsonObject);
                             break;
                         case Requests.get:
-                            System.out.println(ServerMessages.MESSAGE_GET);
-                            crud.get(index, myData.getListName());
-                            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
-                            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
-                            outStream.flush();
+                            get();
                             break;
                         case Requests.edit:
-                            System.out.println(ServerMessages.MESSAGE_EDIT);
-                            crud.edit(index, myData.getListName(), jsonObject.getJSONArray(myData.getListName()));
-                            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
-                            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
-                            outStream.flush();
+                            edit(jsonObject);
                             break;
                         case Requests.remove:
-                            System.out.println(ServerMessages.MESSAGE_REMOVE);
-                            crud.remove(index, myData.getListName());
-                            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
-                            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
-                            outStream.flush();
+                            remove();
                             break;
                         case Requests.getFile:
                             try {
@@ -114,30 +98,18 @@ public class Server {
                                 File f = new File("data/"+jsonObject.getString("name"));
                                 System.out.println("Path: "+f.getPath());
                                 if (f.exists()) {
-                                    System.out.println("File exist. Sending response to client");
-                                    outStream.writeUTF(new JSONObject("{\"request\":\"OK\",\"file\":\"" + f.length() + "\"}").toString());
-                                    outStream.flush();
-                                    buffer = new byte[(int) f.length()];
-                                    BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f));
-                                    bis.read(buffer, 0, buffer.length);
-                                    System.out.println("Start sending file " + f.getName());
-                                    outStream.write(buffer, 0, buffer.length);
-                                    outStream.flush();
-                                    System.out.println("File was send successful");
+                                    sendFile(f);
                                 } else {
                                     System.out.println("Throw exception");
                                     throw FileNotFound;
                                 }
                             } catch (Exception e) {
-                                String requestResultNo = "File not exist";
-                                outStream.writeUTF(new JSONObject("{\"request\":\"" + requestResultNo + "\",\"file\":\"0\"}").toString());
+                                outStream.writeUTF(new JSONObject("{\"request\":\"" + ServerMessages.MESSAGE_REQUEST_NO + "\",\"file\":\"0\"}").toString());
                                 outStream.flush();
                             }
                             break;
                         case Requests.stop:
-                            server.close();
-                            inStream.close();
-                            outStream.close();
+                            stop();
                             flag = false;
                             break;
                         default:
@@ -155,6 +127,83 @@ public class Server {
                 loadServer();
             }
             else System.out.println(ServerMessages.MESSAGE_END);
+        }
+    }
+
+    private void add(JSONObject jsonObject){
+        try {
+            System.out.println(ServerMessages.MESSAGE_ADD);
+            crud.add(jsonObject.getJSONArray(myData.getListName()), myData.getListName());
+            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
+            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
+            outStream.flush();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    private void get(){
+        try{
+            System.out.println(ServerMessages.MESSAGE_GET);
+            crud.get(index, myData.getListName());
+            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
+            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
+            outStream.flush();
+
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+
+    }
+
+    private void edit(JSONObject jsonObject){
+        try {
+            System.out.println(ServerMessages.MESSAGE_EDIT);
+            crud.edit(index, myData.getListName(), jsonObject.getJSONArray(myData.getListName()));
+            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
+            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
+            outStream.flush();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    private void remove(){
+        try {
+            System.out.println(ServerMessages.MESSAGE_REMOVE);
+            crud.remove(index, myData.getListName());
+            System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
+            outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
+            outStream.flush();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    private void sendFile(File f){
+        try {
+            System.out.println("File exist. Sending response to client");
+            outStream.writeUTF(new JSONObject("{\"request\":\"OK\",\"file\":\"" + f.length() + "\"}").toString());
+            outStream.flush();
+            buffer = new byte[(int) f.length()];
+            BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f));
+            bis.read(buffer, 0, buffer.length);
+            System.out.println("Start sending file " + f.getName());
+            outStream.write(buffer, 0, buffer.length);
+            outStream.flush();
+            System.out.println("File was send successful");
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    private void stop(){
+        try {
+            server.close();
+            inStream.close();
+            outStream.close();
+        }catch (IOException e){
+            e.printStackTrace();
         }
     }
 
