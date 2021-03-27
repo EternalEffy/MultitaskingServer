@@ -9,15 +9,16 @@ public class FileData {
 
     private JSONObject json;
     private String fileName;
-    private final String listName = "userData";
+    private String listName;
     private byte[] b;
 
     public String getListName() {
         return listName;
     }
 
-    public int loadJSON(String fileName) {
+    public int loadJSON(String fileName,String listName) {
         this.fileName = fileName;
+        this.listName = listName;
         try {
             json = new JSONObject(new BufferedReader( new FileReader(fileName)).readLine());
         } catch (FileNotFoundException e) {

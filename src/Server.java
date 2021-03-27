@@ -10,23 +10,40 @@ public class Server {
     private static DataInputStream inStream;
     private static DataOutputStream outStream;
     private static FileData myData;
+    private static FileData myCatalog;
     private static CRUD crud;
     private int index,port;
-    private String fileName;
+    private String fileName,catalogName;
     private String requestFormClient;
     private boolean flag = true;
     private int countRequests = 0;
     private byte[] buffer;
     private JSONObject jsonObject;
     private Exception FileNotFound;
+    private CatalogCreator creator;
 
-    public int loadFile(String fileName){
+    public int loadFile(String fileName,String listName){
         this.fileName = fileName;
         myData = new FileData();
         System.out.println(ServerMessages.MESSAGE_LOAD_FILE);
         try {
-            myData.loadJSON(fileName);
+            myData.loadJSON(fileName,listName);
         }catch (Exception e){
+            return -1;
+        }
+        return 0;
+    }
+
+    public int loadCatalog(String catalogName,String listName){
+        this.catalogName = catalogName;
+        myCatalog = new FileData();
+        System.out.println(myCatalog.getListName());
+        System.out.println(catalogName);
+        System.out.println(ServerMessages.MESSAGE_LOAD_FILE);
+        try {
+            myCatalog.loadJSON(catalogName,listName);
+        }
+        catch (Exception e){
             return -1;
         }
         return 0;
@@ -42,6 +59,16 @@ public class Server {
         return 0;
     }
 
+    public int saveCatalog(){
+        System.out.println(ServerMessages.MESSAGE_SAVE_FILE);
+        try {
+            myCatalog.saveJSON(creator.getJson(), catalogName);
+        } catch (Exception e) {
+            return -1;
+        }
+        return 0;
+    }
+
     public void setPort(int port){
         this.port = port;
         try {
@@ -51,8 +78,10 @@ public class Server {
         }
     }
 
+
     public void loadServer() {
         crud = new CRUD(myData.getJson());
+        creator = new CatalogCreator(myCatalog.getJson());
         System.out.println("Server started");
         System.out.println("Port: "+port);
         try {
@@ -94,11 +123,14 @@ public class Server {
                             break;
                         case Requests.getFile:
                             try {
-                                System.out.println("Making file object name: " + jsonObject.getString("name"));
-                                File f = new File("data/"+jsonObject.getString("name"));
-                                System.out.println("Path: "+f.getPath());
-                                if (f.exists()) {
-                                    sendFile(f);
+                                System.out.println("Search file");
+                                if (creator.get(jsonObject.getString("name"), myCatalog.getListName()).getString("fileName").equals(jsonObject.getString("name"))) {
+                                    System.out.println("Making jsonObject with fileInfo");
+                                    JSONObject jsonNeed = creator.get(jsonObject.getString("name"),myCatalog.getListName());
+                                    System.out.println("Making file object name: " + jsonObject.getString("name"));
+                                    File f = new File(jsonNeed.getString("path")+jsonNeed.getString("fileName")+jsonNeed.getString("extension"));
+                                    System.out.println("Path: "+f.getPath());
+                                    sendFile(f,jsonNeed.getString("extension"));
                                 } else {
                                     System.out.println("Throw exception");
                                     throw FileNotFound;
@@ -144,7 +176,7 @@ public class Server {
 
     private void get(){
         try{
-            System.out.println(ServerMessages.MESSAGE_GET);
+            System.out.println(ServerMessages.MESSAGE_GET+index);
             crud.get(index, myData.getListName());
             System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
             outStream.writeUTF(ServerMessages.MESSAGE_USER_INFO + crud.get(index, myData.getListName()));
@@ -180,10 +212,10 @@ public class Server {
         }
     }
 
-    private void sendFile(File f){
+    private void sendFile(File f,String extension){
         try {
             System.out.println("File exist. Sending response to client");
-            outStream.writeUTF(new JSONObject("{\"request\":\"OK\",\"file\":\"" + f.length() + "\"}").toString());
+            outStream.writeUTF(new JSONObject("{\"request\":\"OK\",\"file\":\"" + f.length() + "\",\"extension\":\""+extension+"\"}").toString());
             outStream.flush();
             buffer = new byte[(int) f.length()];
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f));
