@@ -1,12 +1,11 @@
 import org.json.JSONObject;
-
 import java.io.*;
-import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 
-public class Server {
+
+public class Server implements Runnable{
     private static Socket clientSocket;
-    private static ServerSocket server;
     private static DataInputStream inStream;
     private static DataOutputStream outStream;
     private static FileData myData;
@@ -21,6 +20,12 @@ public class Server {
     private JSONObject jsonObject;
     private Exception FileNotFound;
     private CatalogCreator creator;
+    private String nameClient;
+    private ArrayList<Thread> threads;
+
+    public Server(Socket client) {
+        clientSocket = client;
+    }
 
     public int loadFile(String fileName,String listName){
         this.fileName = fileName;
@@ -37,11 +42,11 @@ public class Server {
     public int loadCatalog(String catalogName,String listName){
         this.catalogName = catalogName;
         myCatalog = new FileData();
-        System.out.println(myCatalog.getListName());
         System.out.println(catalogName);
         System.out.println(ServerMessages.MESSAGE_LOAD_FILE);
         try {
             myCatalog.loadJSON(catalogName,listName);
+            System.out.println(myCatalog.getListName());
         }
         catch (Exception e){
             return -1;
@@ -69,15 +74,9 @@ public class Server {
         return 0;
     }
 
-    public void setPort(int port){
-        this.port = port;
-        try {
-            server = new ServerSocket(port);
-        } catch (IOException e) {
-            setPort(port+1);
-        }
+    public void setThreads(ArrayList<Thread> threads) {
+        this.threads =threads;
     }
-
 
     public void loadServer() {
         crud = new CRUD(myData.getJson());
@@ -85,17 +84,16 @@ public class Server {
         System.out.println("Server started");
         System.out.println("Port: "+port);
         try {
-            while(true) {
-                clientSocket = server.accept();
+            while(!clientSocket.isClosed()) {
                 if (clientSocket.isConnected()) {
-                    System.out.println(ServerMessages.MESSAGE_ACCESS + clientSocket.getInetAddress());
                     inStream = new DataInputStream(clientSocket.getInputStream());
                     outStream = new DataOutputStream((clientSocket.getOutputStream()));
-                    outStream.writeUTF(inStream.readUTF() + ServerMessages.USER_MESSAGE_ACCESS);
+                    nameClient=inStream.readUTF();
+                    System.out.println(ServerMessages.MESSAGE_ACCESS + clientSocket.getInetAddress()+"clientName: "+nameClient);
+                    outStream.writeUTF( nameClient+ ServerMessages.USER_MESSAGE_ACCESS);
                     outStream.flush();
                 }
 
-                while (!clientSocket.isClosed()) {
                     if(countRequests == 99){
                         if(saveFile()==0){
                             System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_YES);
@@ -105,32 +103,33 @@ public class Server {
                     }
                     requestFormClient = inStream.readUTF();
                     countRequests++;
-                    index = Integer.parseInt(inStream.readUTF());
                     jsonObject = new JSONObject(requestFormClient);
-                    System.out.println(ServerMessages.MESSAGE_REQUEST+jsonObject);
+                    System.out.println(ServerMessages.MESSAGE_REQUEST+jsonObject+index+" "+nameClient);
                     switch (jsonObject.getString("request")) {
                         case Requests.add:
+                            index = Integer.parseInt(inStream.readUTF());
                             add(jsonObject);
                             break;
                         case Requests.get:
+                            index = Integer.parseInt(inStream.readUTF());
                             get();
                             break;
                         case Requests.edit:
+                            index = Integer.parseInt(inStream.readUTF());
                             edit(jsonObject);
                             break;
                         case Requests.remove:
+                            index = Integer.parseInt(inStream.readUTF());
                             remove();
                             break;
                         case Requests.getFile:
                             try {
                                 System.out.println("Search file");
-                                if (creator.get(jsonObject.getString("name"), myCatalog.getListName()).getString("fileName").equals(jsonObject.getString("name"))) {
-                                    System.out.println("Making jsonObject with fileInfo");
-                                    JSONObject jsonNeed = creator.get(jsonObject.getString("name"),myCatalog.getListName());
-                                    System.out.println("Making file object name: " + jsonObject.getString("name"));
-                                    File f = new File(jsonNeed.getString("path")+jsonNeed.getString("fileName")+jsonNeed.getString("extension"));
-                                    System.out.println("Path: "+f.getPath());
-                                    sendFile(f,jsonNeed.getString("extension"));
+                                System.out.println("Making file object name: " + jsonObject.getString("name"));
+                                File f = new File("data/"+jsonObject.getString("name"));
+                                System.out.println("Path: "+f.getPath());
+                                if (f.exists()) {
+                                    sendFile(f);
                                 } else {
                                     System.out.println("Throw exception");
                                     throw FileNotFound;
@@ -141,24 +140,21 @@ public class Server {
                             }
                             break;
                         case Requests.stop:
-                            stop();
                             flag = false;
                             break;
                         default:
                             outStream.writeUTF(ServerMessages.MESSAGE_ERROR);
                             outStream.flush();
-                            clientSocket.close();
                             System.out.println(ServerMessages.MESSAGE_USER_INFO + ServerMessages.MESSAGE_RESULT_NO);
                     }
-                }
             }
         }
+        catch (InterruptedIOException e){
+            System.out.println("Interrupted");
+        }
         catch (IOException e) {
-            System.out.println(ServerMessages.MESSAGE_CLIENT_CLOSE);
-            if(flag==true) {
-                loadServer();
-            }
-            else System.out.println(ServerMessages.MESSAGE_END);
+            System.out.println(ServerMessages.MESSAGE_CLIENT_CLOSE+nameClient);
+            System.out.println(ServerMessages.MESSAGE_END);
         }
     }
 
@@ -212,32 +208,38 @@ public class Server {
         }
     }
 
-    private void sendFile(File f,String extension){
+    private void sendFile(File f){
         try {
-            System.out.println("File exist. Sending response to client");
-            outStream.writeUTF(new JSONObject("{\"request\":\"OK\",\"file\":\"" + f.length() + "\",\"extension\":\""+extension+"\"}").toString());
-            outStream.flush();
-            buffer = new byte[(int) f.length()];
-            BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f));
-            bis.read(buffer, 0, buffer.length);
-            System.out.println("Start sending file " + f.getName());
-            outStream.write(buffer, 0, buffer.length);
-            outStream.flush();
-            System.out.println("File was send successful");
-        }catch (IOException e){
-            e.printStackTrace();
+                System.out.println("File exist. Sending response to client " + nameClient);
+                outStream.writeUTF(new JSONObject("{\"request\":\"OK\",\"file\":\"" + f.length() + "\"}").toString());
+                System.out.println(nameClient+" currentClient take response from me");
+                outStream.flush();
+                buffer = new byte[(int) f.length()];
+                BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f));
+                bis.read(buffer, 0, buffer.length);
+                System.out.println("Start sending file " + f.getName() + " to client " + nameClient);
+                System.out.println(nameClient+" currentClient take file");
+                outStream.write(buffer, 0, buffer.length);
+                outStream.flush();
+                System.out.println("File was send successful to client " + nameClient);
+                inStream.close();
+                outStream.close();
+        }catch (InterruptedIOException e){
+            System.out.println("interrupted in SEND FILE");
+        }
+        catch (IOException e){
+            System.out.println("Send file ERROR");
         }
     }
 
-    private void stop(){
-        try {
-            server.close();
-            inStream.close();
-            outStream.close();
-        }catch (IOException e){
-            e.printStackTrace();
-        }
+
+    @Override
+    public void run() {
+        loadFile("test.json", "userData");
+        loadCatalog("Catalog.json", "fileInfo");
+        loadServer();
+        saveCatalog();
+        saveFile();
     }
-
-
 }
+
